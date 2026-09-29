@@ -1,0 +1,10 @@
+chromadb
+langchain-community
+langchain-core
+langchain-text-splitters
+pymupdf
+torch
+transformers
+accelerate
+langgraph
+groq

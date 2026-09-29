@@ -1,0 +1,8 @@
+services:
+  nist-rag:
+    build: .
+    container_name: nist-rag
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    stdin_open: true
+    tty: true
