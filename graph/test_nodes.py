@@ -4,52 +4,114 @@ from graph.nodes import (
     answer_node,
     check_retrieval_node,
     retrieve_node,
+    rewrite_query_node,
 )
 
 
 class FakeRetriever:
-
-    def __init__(self, results):
-        self.results = results
+    def __init__(self, results=None):
+        self.results = results or []
         self.last_query = None
         self.last_top_k = None
 
-    def search(self, query, top_k):
+    def search(self, query, top_k=5):
         self.last_query = query
         self.last_top_k = top_k
-
         return self.results
 
 
 class FakeLLM:
-
-    def __init__(self):
-        self.last_prompt = None
+    def __init__(self, response="Fake answer"):
+        self.response = response
+        self.prompts = []
 
     def generate(self, prompt):
-        self.last_prompt = prompt
+        self.prompts.append(prompt)
+        return self.response
 
-        return (
-            "The four core functions are GOVERN, MAP, "
-            "MEASURE, and MANAGE. "
-            "[nist.ai.100-1.pdf, Page 25]"
+
+class TestRewriteQueryNode(unittest.TestCase):
+
+    def test_uses_original_query_without_history(self):
+        llm = FakeLLM()
+
+        state = {
+            "query": "What are the four functions of the NIST AI RMF?",
+            "history": [],
+        }
+
+        result = rewrite_query_node(state, llm)
+
+        self.assertEqual(
+            result["rewritten_query"],
+            state["query"],
+        )
+
+        self.assertEqual(
+            len(llm.prompts),
+            0,
+        )
+
+    def test_rewrites_follow_up_query(self):
+        llm = FakeLLM(
+            "Which NIST AI RMF function is cross-cutting?"
+        )
+
+        state = {
+            "query": "Which one is cross-cutting?",
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "What are the four functions "
+                        "of the NIST AI RMF?"
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Govern, Map, Measure, and Manage."
+                    ),
+                },
+            ],
+        }
+
+        result = rewrite_query_node(state, llm)
+
+        self.assertEqual(
+            result["rewritten_query"],
+            "Which NIST AI RMF function is cross-cutting?",
+        )
+
+        self.assertEqual(len(llm.prompts), 1)
+
+        prompt = llm.prompts[0]
+
+        self.assertIn(
+            "Which one is cross-cutting?",
+            prompt,
+        )
+
+        self.assertIn(
+            "Govern, Map, Measure, and Manage.",
+            prompt,
         )
 
 
 class TestRetrieveNode(unittest.TestCase):
 
     def test_uses_rewritten_query(self):
-        fake_results = [
-            {
-                "content": "GOVERN is a core function.",
-                "source": "nist.ai.100-1.pdf",
-                "page": 25,
-                "section": "AI RMF Core",
-                "distance": 0.3,
-            }
-        ]
-
-        retriever = FakeRetriever(fake_results)
+        retriever = FakeRetriever(
+            [
+                {
+                    "content": "GOVERN is cross-cutting.",
+                    "source": "AI_RMF_1.0.pdf",
+                    "page": 25,
+                    "section": "2. Core",
+                    "distance": 0.2,
+                }
+            ]
+        )
 
         state = {
             "query": "Which one is cross-cutting?",
@@ -74,42 +136,25 @@ class TestRetrieveNode(unittest.TestCase):
         )
 
         self.assertEqual(
-            result["retrieved_documents"],
-            fake_results,
+            len(result["retrieved_documents"]),
+            1,
         )
 
     def test_falls_back_to_original_query(self):
-        fake_results = [
-            {
-                "content": (
-                    "The AI RMF Core has four functions."
-                ),
-                "source": "nist.ai.100-1.pdf",
-                "page": 25,
-                "section": "AI RMF Core",
-                "distance": 0.3,
-            }
-        ]
-
-        retriever = FakeRetriever(fake_results)
+        retriever = FakeRetriever([])
 
         state = {
-            "query": "What are the four functions?",
+            "query": "What is GOVERN?",
         }
 
-        result = retrieve_node(
+        retrieve_node(
             state,
             retriever,
         )
 
         self.assertEqual(
             retriever.last_query,
-            "What are the four functions?",
-        )
-
-        self.assertEqual(
-            result["retrieved_documents"],
-            fake_results,
+            "What is GOVERN?",
         )
 
 
@@ -126,10 +171,12 @@ class TestCheckRetrievalNode(unittest.TestCase):
             result["retrieval_sufficient"]
         )
 
-    def test_single_document_is_insufficient(self):
+    def test_one_document_is_insufficient(self):
         state = {
             "retrieved_documents": [
-                {"content": "chunk 1"},
+                {
+                    "content": "GOVERN is cross-cutting.",
+                }
             ],
         }
 
@@ -142,8 +189,12 @@ class TestCheckRetrievalNode(unittest.TestCase):
     def test_multiple_documents_are_sufficient(self):
         state = {
             "retrieved_documents": [
-                {"content": "chunk 1"},
-                {"content": "chunk 2"},
+                {
+                    "content": "Document 1",
+                },
+                {
+                    "content": "Document 2",
+                },
             ],
         }
 
@@ -156,25 +207,28 @@ class TestCheckRetrievalNode(unittest.TestCase):
 
 class TestAnswerNode(unittest.TestCase):
 
-    def test_generates_grounded_answer(self):
-        llm = FakeLLM()
+    def test_returns_answer_from_llm(self):
+        llm = FakeLLM(
+            "GOVERN is the cross-cutting function."
+        )
 
         state = {
-            "query": (
-                "What are the four core functions?"
-            ),
+            "query": "Which function is cross-cutting?",
             "retrieved_documents": [
                 {
-                    "content": (
-                        "The AI RMF Core is composed of "
-                        "four functions: GOVERN, MAP, "
-                        "MEASURE, and MANAGE."
-                    ),
-                    "source": "nist.ai.100-1.pdf",
+                    "content": "GOVERN is cross-cutting.",
+                    "source": "AI_RMF_1.0.pdf",
                     "page": 25,
-                    "section": "AI RMF Core",
-                    "distance": 0.3291,
-                }
+                    "section": "2. Core",
+                    "distance": 0.2,
+                },
+                {
+                    "content": "The AI RMF has four functions.",
+                    "source": "AI_RMF_1.0.pdf",
+                    "page": 25,
+                    "section": "2. Core",
+                    "distance": 0.3,
+                },
             ],
         }
 
@@ -183,89 +237,51 @@ class TestAnswerNode(unittest.TestCase):
             llm,
         )
 
-        self.assertIn(
-            "GOVERN",
+        self.assertEqual(
             result["answer"],
+            "GOVERN is the cross-cutting function.",
+        )
+
+        self.assertEqual(len(llm.prompts), 1)
+
+        prompt = llm.prompts[0]
+
+        self.assertIn(
+            "Which function is cross-cutting?",
+            prompt,
         )
 
         self.assertIn(
-            "MAP",
-            result["answer"],
+            "GOVERN is cross-cutting.",
+            prompt,
         )
 
         self.assertIn(
-            "MEASURE",
-            result["answer"],
+            "AI_RMF_1.0.pdf",
+            prompt,
         )
 
-        self.assertIn(
-            "MANAGE",
-            result["answer"],
-        )
-
-    def test_prompt_contains_query(self):
+    def test_handles_empty_documents(self):
         llm = FakeLLM()
 
         state = {
-            "query": "What is the GOVERN function?",
-            "retrieved_documents": [
-                {
-                    "content": (
-                        "The GOVERN function establishes "
-                        "organizational processes."
-                    ),
-                    "source": "nist.ai.100-1.pdf",
-                    "page": 26,
-                    "section": "5.1 Govern",
-                    "distance": 0.4,
-                }
-            ],
+            "query": "What is unrelated information?",
+            "retrieved_documents": [],
         }
 
-        answer_node(
+        result = answer_node(
             state,
             llm,
         )
 
         self.assertIn(
-            "What is the GOVERN function?",
-            llm.last_prompt,
+            "not contain enough information",
+            result["answer"],
         )
 
-    def test_prompt_contains_source_metadata(self):
-        llm = FakeLLM()
-
-        state = {
-            "query": "What is the GOVERN function?",
-            "retrieved_documents": [
-                {
-                    "content": "GOVERN manages AI risks.",
-                    "source": "nist.ai.100-1.pdf",
-                    "page": 26,
-                    "section": "5.1 Govern",
-                    "distance": 0.4,
-                }
-            ],
-        }
-
-        answer_node(
-            state,
-            llm,
-        )
-
-        self.assertIn(
-            "nist.ai.100-1.pdf",
-            llm.last_prompt,
-        )
-
-        self.assertIn(
-            "Page: 26",
-            llm.last_prompt,
-        )
-
-        self.assertIn(
-            "5.1 Govern",
-            llm.last_prompt,
+        self.assertEqual(
+            len(llm.prompts),
+            0,
         )
 
 

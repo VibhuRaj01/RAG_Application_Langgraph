@@ -1,0 +1,34 @@
+[
+  {
+    "role": "user",
+    "content": "What are the four core functions of the NIST AI RMF?"
+  },
+  {
+    "role": "assistant",
+    "content": "The NIST AI Risk Management Framework’s Core is organized around four high‑level functions:\n\n**GOVERN, MAP, MEASURE, and MANAGE**【Source 1, Page 25】【Source 2, Page 8】"
+  },
+  {
+    "role": "user",
+    "content": "Which one is cross-cutting?"
+  },
+  {
+    "role": "assistant",
+    "content": "Governance is the cross‑cutting function; it is intended to inform and be infused throughout the other three functions (MAP, MEASURE, and MANAGE)【Source 2, Page 25】."
+  },
+  {
+    "role": "user",
+    "content": "What is the purpose of the NIST AI RMF?"
+  },
+  {
+    "role": "assistant",
+    "content": "The NIST AI Risk Management Framework is intended to give organizations a structured way to manage the risks of AI systems and to ensure those systems are trustworthy—​valid, reliable, safe, secure, resilient, accountable, transparent, explainable, privacy‑enhanced, and fair.  Its “Core” defines four functions (GOVERN, MAP, MEASURE, MANAGE) that can be applied throughout the AI lifecycle to address risk in practice【Document 5, Page 8】."
+  },
+  {
+    "role": "user",
+    "content": "Who is it intended for?"
+  },
+  {
+    "role": "assistant",
+    "content": "The AI Risk Management Framework is intended for **organizations** that develop, deploy, or use AI systems and need to manage the associated risks — it provides a set of functions (GOVERN, MAP, MEASURE, MANAGE) to help organizations address AI‑related risks throughout the AI lifecycle【Source 5, Page 8】."
+  }
+]
